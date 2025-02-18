@@ -1,0 +1,31 @@
+# Global ignore defaults
+**/node_modules/
+**/.npm/
+**/__pycache__/
+**/.pytest_cache/
+**/.mypy_cache/
+
+# Build caches
+**/.gradle/
+**/.nuget/
+**/.cargo/
+**/.stack-work/
+**/.ccache/
+
+# IDE and Editor caches
+**/.idea/
+**/.vscode/
+**/*.swp
+**/*~
+
+# Temp files
+**/*.tmp
+**/*.temp
+**/*.bak
+
+**/*.meta
+**/package-lock.json
+
+**/apps/native/src-tauri/target/
+**/apps/web/.next/server/chunks/
+**/apps/web/.next/static/chunks/
