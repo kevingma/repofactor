@@ -1,7 +1,8 @@
-import { AnalyzeTextView } from "@repo/ui/views/analyzeTextView";
+import React from "react";
+import { RepoExplorerView } from "@repo/ui/views/RepoExplorerView";
 
 function App() {
-  return <AnalyzeTextView />;
+  return <RepoExplorerView />;
 }
 
 export default App;
