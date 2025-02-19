@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
-import { readDir, readTextFile, DirEntry } from "@tauri-apps/plugin-fs";
+import { readDir, readTextFile } from "@tauri-apps/plugin-fs";
+import { join } from "@tauri-apps/api/path";
 import { Button } from "@repo/ui/components/button";
 import { Checkbox } from "@repo/ui/components/checkbox";
 import { Folder, File, ChevronRight, ChevronDown } from "lucide-react";
@@ -22,25 +23,43 @@ interface FsEntry {
   path: string;
   name: string;
   isFile: boolean;
+  isDirectory: boolean;
   isChecked: boolean;
   isExpanded: boolean;
   children: FsEntry[];
 }
 
 /**
- * Convert a DirEntry (from tauri-plugin-fs) into our internal FsEntry structure,
- * recursively transforming child entries if present.
+ * Recursively read all subdirectories and files from the given path,
+ * returning a structured array of FsEntry objects.
  */
-function transformDirEntryToFsEntry(entry: DirEntry): FsEntry {
-  return {
-    path: entry.path,
-    name: entry.name,
-    isFile: entry.isFile,
-    isChecked: true,
-    isExpanded: false,
-    children:
-      entry.children?.map((child) => transformDirEntryToFsEntry(child)) ?? [],
-  };
+async function readFsEntries(dirPath: string): Promise<FsEntry[]> {
+  const entries = await readDir(dirPath);
+  const result: FsEntry[] = [];
+
+  for (const entry of entries) {
+    // Ignore hidden files/folders (those starting with a dot)
+    if (entry.name.startsWith(".")) continue;
+    
+    const fullPath = await join(dirPath, entry.name);
+
+    // If directory, recurse into children
+    let children: FsEntry[] = [];
+    if (entry.isDirectory) {
+      children = await readFsEntries(fullPath);
+    }
+
+    result.push({
+      path: fullPath,
+      name: entry.name,
+      isFile: entry.isFile,
+      isDirectory: entry.isDirectory ?? false,
+      isChecked: true,
+      isExpanded: false,
+      children,
+    });
+  }
+  return result;
 }
 
 /**
@@ -48,7 +67,7 @@ function transformDirEntryToFsEntry(entry: DirEntry): FsEntry {
  */
 function toggleExpand(entries: FsEntry[], pathToToggle: string): FsEntry[] {
   return entries.map((entry) => {
-    if (entry.path === pathToToggle && !entry.isFile) {
+    if (entry.path === pathToToggle && entry.isDirectory) {
       // flip expanded
       return {
         ...entry,
@@ -68,22 +87,28 @@ function toggleExpand(entries: FsEntry[], pathToToggle: string): FsEntry[] {
 }
 
 /**
+ * Helper function to recursively set the checked state on all descendants.
+ */
+function setCheckedForAll(entries: FsEntry[], checked: boolean): FsEntry[] {
+  return entries.map((entry) => ({
+    ...entry,
+    isChecked: checked,
+    children: entry.children.length > 0 ? setCheckedForAll(entry.children, checked) : entry.children,
+  }));
+}
+
+/**
  * Recursively toggle the "isChecked" state of a file/folder.
+ * When a folder is toggled, all its children get the same state.
  */
 function toggleChecked(entries: FsEntry[], pathToToggle: string): FsEntry[] {
   return entries.map((entry) => {
     if (entry.path === pathToToggle) {
+      const newVal = !entry.isChecked;
       return {
         ...entry,
-        isChecked: !entry.isChecked,
-        // If a folder is being unchecked, recursively uncheck its children
-        children: !entry.isChecked
-          ? entry.children.map((child) => ({
-              ...child,
-              isChecked: false,
-              children: toggleChecked(child.children, child.path),
-            }))
-          : entry.children,
+        isChecked: newVal,
+        children: entry.isDirectory ? setCheckedForAll(entry.children, newVal) : entry.children,
       };
     }
     if (entry.children.length > 0) {
@@ -103,7 +128,7 @@ export function RepoExplorerView() {
   const [error, setError] = useState("");
 
   /**
-   * Prompt user to pick a directory, then read it once (recursively).
+   * Prompt user to pick a directory, then read it recursively.
    */
   const handleSelectRepository = useCallback(async () => {
     setError("");
@@ -115,9 +140,7 @@ export function RepoExplorerView() {
       });
       if (typeof selectedPath === "string") {
         setRepoPath(selectedPath);
-        // readDir is already recursive by default.
-        const dirEntries = await readDir(selectedPath);
-        const transformed = dirEntries.map(transformDirEntryToFsEntry);
+        const transformed = await readFsEntries(selectedPath);
         setFsTree(transformed);
       }
     } catch (err) {
@@ -164,13 +187,16 @@ export function RepoExplorerView() {
       const hasChildren = entry.children.length > 0;
 
       return (
-        <div key={entry.path} className={cn(indentClass, "flex flex-col py-1")}>
-          <div className="flex items-center space-x-2">
+        <div key={entry.path} className={cn(indentClass, "flex flex-col py-0.5 text-xs")}>
+          <div className="flex items-center space-x-1">
             {/* Folder expand icon or placeholder */}
-            {!entry.isFile ? (
+            {entry.isDirectory ? (
               <div
                 className="cursor-pointer w-4"
-                onClick={() => handleToggleExpand(entry.path)}
+                onClick={(e) => {
+                  e.stopPropagation(); // Prevent click event from affecting parent elements
+                  handleToggleExpand(entry.path);
+                }}
               >
                 {entry.isExpanded ? (
                   <ChevronDown size={16} />
@@ -183,10 +209,10 @@ export function RepoExplorerView() {
             )}
 
             {/* Folder/File icon */}
-            {entry.isFile ? (
-              <File className="text-muted-foreground" size={16} />
-            ) : (
+            {entry.isDirectory ? (
               <Folder className="text-muted-foreground" size={16} />
+            ) : (
+              <File className="text-muted-foreground" size={16} />
             )}
 
             {/* Checkbox */}
@@ -209,8 +235,8 @@ export function RepoExplorerView() {
           </div>
 
           {/* Show children if folder is expanded */}
-          {!entry.isFile && entry.isExpanded && hasChildren && (
-            <div className="ml-2 mt-1 border-l border-l-muted">
+          {entry.isDirectory && entry.isExpanded && hasChildren && (
+            <div className="ml-1 mt-0.5 border-l border-l-muted">
               {renderFsTree(entry.children, level + 1)}
             </div>
           )}
