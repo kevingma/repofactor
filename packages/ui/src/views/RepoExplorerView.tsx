@@ -6,15 +6,7 @@ import { Button } from "@repo/ui/components/button";
 import { Checkbox } from "@repo/ui/components/checkbox";
 import { Folder, File, ChevronRight, ChevronDown } from "lucide-react";
 import { cn } from "@repo/ui/lib/utils";
-
-// shadcn sidebar imports
-import {
-  SidebarProvider,
-  Sidebar,
-  SidebarHeader,
-  SidebarContent,
-  SidebarInset,
-} from "@repo/ui/components/sidebar";
+import { AnalysisLoadingView } from "@repo/ui/views/analysisLoadingView";
 
 /**
  * Data structure representing each file or folder.
@@ -40,7 +32,7 @@ async function readFsEntries(dirPath: string): Promise<FsEntry[]> {
   for (const entry of entries) {
     // Ignore hidden files/folders (those starting with a dot)
     if (entry.name.startsWith(".")) continue;
-    
+
     const fullPath = await join(dirPath, entry.name);
 
     // If directory, recurse into children
@@ -93,7 +85,9 @@ function setCheckedForAll(entries: FsEntry[], checked: boolean): FsEntry[] {
   return entries.map((entry) => ({
     ...entry,
     isChecked: checked,
-    children: entry.children.length > 0 ? setCheckedForAll(entry.children, checked) : entry.children,
+    children: entry.children.length > 0
+      ? setCheckedForAll(entry.children, checked)
+      : entry.children,
   }));
 }
 
@@ -108,7 +102,9 @@ function toggleChecked(entries: FsEntry[], pathToToggle: string): FsEntry[] {
       return {
         ...entry,
         isChecked: newVal,
-        children: entry.isDirectory ? setCheckedForAll(entry.children, newVal) : entry.children,
+        children: entry.isDirectory
+          ? setCheckedForAll(entry.children, newVal)
+          : entry.children,
       };
     }
     if (entry.children.length > 0) {
@@ -126,6 +122,7 @@ export function RepoExplorerView() {
   const [fsTree, setFsTree] = useState<FsEntry[]>([]);
   const [selectedFileContent, setSelectedFileContent] = useState("");
   const [error, setError] = useState("");
+  const [analysisInProgress, setAnalysisInProgress] = useState(false);
 
   /**
    * Prompt user to pick a directory, then read it recursively.
@@ -187,14 +184,17 @@ export function RepoExplorerView() {
       const hasChildren = entry.children.length > 0;
 
       return (
-        <div key={entry.path} className={cn(indentClass, "flex flex-col py-0.5 text-xs")}>
+        <div
+          key={entry.path}
+          className={cn(indentClass, "flex flex-col py-0.5 text-xs")}
+        >
           <div className="flex items-center space-x-1">
             {/* Folder expand icon or placeholder */}
             {entry.isDirectory ? (
               <div
                 className="cursor-pointer w-4"
                 onClick={(e) => {
-                  e.stopPropagation(); // Prevent click event from affecting parent elements
+                  e.stopPropagation(); // Prevent click from affecting parent
                   handleToggleExpand(entry.path);
                 }}
               >
@@ -245,21 +245,30 @@ export function RepoExplorerView() {
     });
   };
 
+  /**
+   * Handle the "Proceed" button click
+   * Set state to show the analysis loading screen.
+   */
+  const handleProceedClick = () => {
+    setAnalysisInProgress(true);
+  };
+
+  // If user clicked "Proceed", render the analysis screen
+  if (analysisInProgress) {
+    return <AnalysisLoadingView fsTree={fsTree} />;
+  }
+
+  // Otherwise, render the file explorer
   return (
-    <SidebarProvider defaultOpen={true} className="h-screen">
-      <Sidebar
-        side="left"
-        variant="sidebar"
-        collapsible="none"
-        className="w-64 border-r border-r-muted flex flex-col"
-      >
-        <SidebarHeader className="p-2 flex-shrink-0">
+    <div className="h-screen flex flex-row">
+      {/* Sidebar */}
+      <div className="w-64 border-r border-r-muted flex flex-col">
+        <div className="p-2 flex-shrink-0">
           <Button variant="default" onClick={handleSelectRepository}>
             Select Repository
           </Button>
-        </SidebarHeader>
-
-        <SidebarContent className="overflow-y-auto p-2">
+        </div>
+        <div className="overflow-y-auto p-2 flex-1">
           {repoPath && fsTree.length > 0 ? (
             renderFsTree(fsTree)
           ) : (
@@ -272,20 +281,31 @@ export function RepoExplorerView() {
               <strong>Error:</strong> {error}
             </p>
           )}
-        </SidebarContent>
-      </Sidebar>
+        </div>
+      </div>
 
-      <SidebarInset className="flex-1 p-4 overflow-y-auto">
-        {selectedFileContent ? (
-          <pre className="bg-secondary p-4 rounded-md whitespace-pre-wrap break-words">
-            {selectedFileContent}
-          </pre>
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            Select a file from the sidebar to view its contents.
-          </p>
+      {/* Main content */}
+      <div className="flex-1 flex flex-col">
+        <div className="p-4 flex-1 overflow-y-auto">
+          {selectedFileContent ? (
+            <pre className="bg-secondary p-4 rounded-md whitespace-pre-wrap break-words">
+              {selectedFileContent}
+            </pre>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Select a file from the sidebar to view its contents.
+            </p>
+          )}
+        </div>
+        {/* Proceed button if we have something selected */}
+        {fsTree.length > 0 && (
+          <div className="p-4 border-t border-t-muted flex justify-center">
+            <Button variant="default" onClick={handleProceedClick}>
+              Proceed
+            </Button>
+          </div>
         )}
-      </SidebarInset>
-    </SidebarProvider>
+      </div>
+    </div>
   );
 }
