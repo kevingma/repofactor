@@ -19,6 +19,35 @@ interface FsEntry {
   isChecked: boolean;
   isExpanded: boolean;
   children: FsEntry[];
+  language?: string;
+}
+
+/**
+ * Basic detection of file language by extension.
+ * Feel free to adjust or expand this mapping.
+ */
+function detectLanguage(filePath: string): string | undefined {
+  const lower = filePath.toLowerCase();
+  if (lower.endsWith(".ts") || lower.endsWith(".tsx")) return "typescript";
+  if (lower.endsWith(".js") || lower.endsWith(".jsx")) return "javascript";
+  if (lower.endsWith(".py")) return "python";
+  if (lower.endsWith(".java")) return "java";
+  if (
+    lower.endsWith(".c") ||
+    lower.endsWith(".h") ||
+    lower.endsWith(".cpp") ||
+    lower.endsWith(".hpp")
+  )
+    return "c/c++";
+  if (lower.endsWith(".cs")) return "c#";
+  if (lower.endsWith(".go")) return "go";
+  if (lower.endsWith(".php")) return "php";
+  if (lower.endsWith(".rb")) return "ruby";
+  if (lower.endsWith(".rs")) return "rust";
+  if (lower.endsWith(".swift")) return "swift";
+  if (lower.endsWith(".kt") || lower.endsWith(".kts")) return "kotlin";
+  // Add more if needed
+  return undefined;
 }
 
 /**
@@ -49,6 +78,7 @@ async function readFsEntries(dirPath: string): Promise<FsEntry[]> {
       isChecked: true,
       isExpanded: false,
       children,
+      language: entry.isFile ? detectLanguage(fullPath) : undefined,
     });
   }
   return result;
