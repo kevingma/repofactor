@@ -12,9 +12,9 @@
   "app": {
     "windows": [
       {
-        "title": "Tauri v2 Next.js Monorepo",
-        "width": 800,
-        "height": 600
+        "title": "RepoFactor",
+        "width": 1000,
+        "height": 800
       }
     ],
     "security": {
