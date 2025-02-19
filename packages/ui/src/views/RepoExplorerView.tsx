@@ -3,40 +3,97 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { readDir, readTextFile, DirEntry } from "@tauri-apps/plugin-fs";
 import { Button } from "@repo/ui/components/button";
 import { Checkbox } from "@repo/ui/components/checkbox";
-import { Card, CardContent, CardHeader, CardTitle } from "@repo/ui/components/card";
+import { Folder, File, ChevronRight, ChevronDown } from "lucide-react";
 import { cn } from "@repo/ui/lib/utils";
 
+// shadcn sidebar imports
+import {
+  SidebarProvider,
+  Sidebar,
+  SidebarHeader,
+  SidebarContent,
+  SidebarInset,
+} from "@repo/ui/components/sidebar";
+
+/**
+ * Data structure representing each file or folder.
+ */
 interface FsEntry {
   path: string;
   name: string;
-  children?: FsEntry[];
   isFile: boolean;
   isChecked: boolean;
+  isExpanded: boolean;
+  children: FsEntry[];
 }
 
 /**
- * Recursively transform tauri readDir result into a tree of FsEntry objects.
+ * Convert a DirEntry (from tauri-plugin-fs) into our internal FsEntry structure,
+ * recursively transforming child entries if present.
  */
-async function buildFsTree(entries: DirEntry[]): Promise<FsEntry[]> {
-  const fsEntries: FsEntry[] = [];
+function transformDirEntryToFsEntry(entry: DirEntry): FsEntry {
+  return {
+    path: entry.path,
+    name: entry.name,
+    isFile: entry.isFile,
+    isChecked: true,
+    isExpanded: false,
+    children:
+      entry.children?.map((child) => transformDirEntryToFsEntry(child)) ?? [],
+  };
+}
 
-  for (const entry of entries) {
-    const fsEntry: FsEntry = {
-      path: (entry as any).path || "",
-      name: entry.name || "",
-      isFile: !((entry as any).children),
-      isChecked: true, // default to checked
-    };
-
-    // If entry has children, then process them recursively
-    if ((entry as any).children) {
-      fsEntry.children = await buildFsTree((entry as any).children);
+/**
+ * Recursively toggle the expanded state for the given path.
+ */
+function toggleExpand(entries: FsEntry[], pathToToggle: string): FsEntry[] {
+  return entries.map((entry) => {
+    if (entry.path === pathToToggle && !entry.isFile) {
+      // flip expanded
+      return {
+        ...entry,
+        isExpanded: !entry.isExpanded,
+      };
     }
 
-    fsEntries.push(fsEntry);
-  }
+    if (entry.children.length > 0) {
+      return {
+        ...entry,
+        children: toggleExpand(entry.children, pathToToggle),
+      };
+    }
 
-  return fsEntries;
+    return entry;
+  });
+}
+
+/**
+ * Recursively toggle the "isChecked" state of a file/folder.
+ */
+function toggleChecked(entries: FsEntry[], pathToToggle: string): FsEntry[] {
+  return entries.map((entry) => {
+    if (entry.path === pathToToggle) {
+      return {
+        ...entry,
+        isChecked: !entry.isChecked,
+        // If a folder is being unchecked, recursively uncheck its children
+        children: !entry.isChecked
+          ? entry.children.map((child) => ({
+              ...child,
+              isChecked: false,
+              children: toggleChecked(child.children, child.path),
+            }))
+          : entry.children,
+      };
+    }
+    if (entry.children.length > 0) {
+      return {
+        ...entry,
+        children: toggleChecked(entry.children, pathToToggle),
+      };
+    }
+    return entry;
+  });
 }
 
 export function RepoExplorerView() {
@@ -45,6 +102,9 @@ export function RepoExplorerView() {
   const [selectedFileContent, setSelectedFileContent] = useState("");
   const [error, setError] = useState("");
 
+  /**
+   * Prompt user to pick a directory, then read it once (recursively).
+   */
   const handleSelectRepository = useCallback(async () => {
     setError("");
     try {
@@ -55,9 +115,10 @@ export function RepoExplorerView() {
       });
       if (typeof selectedPath === "string") {
         setRepoPath(selectedPath);
+        // readDir is already recursive by default.
         const dirEntries = await readDir(selectedPath);
-        const tree = await buildFsTree(dirEntries);
-        setFsTree(tree);
+        const transformed = dirEntries.map(transformDirEntryToFsEntry);
+        setFsTree(transformed);
       }
     } catch (err) {
       console.error(err);
@@ -65,40 +126,25 @@ export function RepoExplorerView() {
     }
   }, []);
 
-  const toggleChecked = (entry: FsEntry, pathToToggle: string): FsEntry => {
-    // If this is the entry we want to toggle, flip isChecked
-    if (entry.path === pathToToggle) {
-      const updated = { ...entry, isChecked: !entry.isChecked };
-      // If we uncheck a folder, recursively uncheck children
-      if (!updated.isChecked && updated.children) {
-        updated.children = updated.children.map((child) =>
-          toggleChecked(child, child.path)
-        );
-      }
-      return updated;
-    }
-
-    // Otherwise, if it has children, recurse
-    if (entry.children) {
-      return {
-        ...entry,
-        children: entry.children.map((child) => toggleChecked(child, pathToToggle)),
-      };
-    }
-
-    return entry;
+  /**
+   * Toggle folder expand/collapse.
+   */
+  const handleToggleExpand = (pathToToggle: string) => {
+    setFsTree((prev) => toggleExpand(prev, pathToToggle));
   };
 
+  /**
+   * Checkbox toggle for file or folder.
+   */
   const handleCheckboxChange = (pathToToggle: string) => {
-    setFsTree((prev) =>
-      prev.map((entry) => toggleChecked(entry, pathToToggle))
-    );
+    setFsTree((prev) => toggleChecked(prev, pathToToggle));
   };
 
-  const handleFileClick = useCallback(
-    async (entry: FsEntry) => {
-      if (!entry.isFile) return;
-
+  /**
+   * Load file content when user clicks on a file.
+   */
+  const handleFileClick = useCallback(async (entry: FsEntry) => {
+    if (entry.isFile) {
       try {
         const content = await readTextFile(entry.path);
         setSelectedFileContent(content);
@@ -106,37 +152,66 @@ export function RepoExplorerView() {
         console.error(err);
         setError(String(err));
       }
-    },
-    []
-  );
+    }
+  }, []);
 
   /**
-   * Recursively render the file tree structure with checkboxes.
+   * Recursively render the file/folder tree structure.
    */
-  const renderFsTree = (entries: FsEntry[]) => {
+  const renderFsTree = (entries: FsEntry[], level = 0) => {
     return entries.map((entry) => {
-      const hasChildren = entry.children && entry.children.length > 0;
+      const indentClass = `pl-${level * 4}`;
+      const hasChildren = entry.children.length > 0;
+
       return (
-        <div key={entry.path} className="pl-2">
-          <div className="flex items-center">
+        <div key={entry.path} className={cn(indentClass, "flex flex-col py-1")}>
+          <div className="flex items-center space-x-2">
+            {/* Folder expand icon or placeholder */}
+            {!entry.isFile ? (
+              <div
+                className="cursor-pointer w-4"
+                onClick={() => handleToggleExpand(entry.path)}
+              >
+                {entry.isExpanded ? (
+                  <ChevronDown size={16} />
+                ) : (
+                  <ChevronRight size={16} />
+                )}
+              </div>
+            ) : (
+              <div className="w-4" />
+            )}
+
+            {/* Folder/File icon */}
+            {entry.isFile ? (
+              <File className="text-muted-foreground" size={16} />
+            ) : (
+              <Folder className="text-muted-foreground" size={16} />
+            )}
+
+            {/* Checkbox */}
             <Checkbox
               checked={entry.isChecked}
               onCheckedChange={() => handleCheckboxChange(entry.path)}
               id={entry.path}
             />
+
+            {/* Name - click to preview file */}
             <span
-              onClick={() => handleFileClick(entry)}
+              onClick={() => entry.isFile && handleFileClick(entry)}
               className={cn(
-                "ml-2 cursor-pointer",
-                entry.isFile ? "font-normal" : "font-semibold"
+                "cursor-pointer",
+                entry.isFile ? "font-normal" : "font-semibold",
               )}
             >
               {entry.name}
             </span>
           </div>
-          {hasChildren && entry.isChecked && (
-            <div className="ml-4 border-l border-l-muted pl-2 mt-1">
-              {renderFsTree(entry.children!)}
+
+          {/* Show children if folder is expanded */}
+          {!entry.isFile && entry.isExpanded && hasChildren && (
+            <div className="ml-2 mt-1 border-l border-l-muted">
+              {renderFsTree(entry.children, level + 1)}
             </div>
           )}
         </div>
@@ -145,37 +220,36 @@ export function RepoExplorerView() {
   };
 
   return (
-    <div className="flex h-screen">
-      {/* Sidebar */}
-      <div className="w-64 border-r border-r-muted p-4 flex flex-col gap-2">
-        <Button variant="default" onClick={handleSelectRepository}>
-          Select Repository
-        </Button>
-        {repoPath && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Repo Tree</CardTitle>
-            </CardHeader>
-            <CardContent className="max-h-[60vh] overflow-y-auto">
-              {fsTree.length > 0 ? (
-                renderFsTree(fsTree)
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  No files found or folder is empty.
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        )}
-        {error && (
-          <p className="text-sm text-red-500 mt-2">
-            <strong>Error:</strong> {error}
-          </p>
-        )}
-      </div>
+    <SidebarProvider defaultOpen={true} className="h-screen">
+      <Sidebar
+        side="left"
+        variant="sidebar"
+        collapsible="none"
+        className="w-64 border-r border-r-muted flex flex-col"
+      >
+        <SidebarHeader className="p-2 flex-shrink-0">
+          <Button variant="default" onClick={handleSelectRepository}>
+            Select Repository
+          </Button>
+        </SidebarHeader>
 
-      {/* Main content area */}
-      <div className="flex-1 p-4 overflow-y-auto">
+        <SidebarContent className="overflow-y-auto p-2">
+          {repoPath && fsTree.length > 0 ? (
+            renderFsTree(fsTree)
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              No folder selected or empty.
+            </p>
+          )}
+          {error && (
+            <p className="text-sm text-red-500 mt-2">
+              <strong>Error:</strong> {error}
+            </p>
+          )}
+        </SidebarContent>
+      </Sidebar>
+
+      <SidebarInset className="flex-1 p-4 overflow-y-auto">
         {selectedFileContent ? (
           <pre className="bg-secondary p-4 rounded-md whitespace-pre-wrap break-words">
             {selectedFileContent}
@@ -185,7 +259,7 @@ export function RepoExplorerView() {
             Select a file from the sidebar to view its contents.
           </p>
         )}
-      </div>
-    </div>
+      </SidebarInset>
+    </SidebarProvider>
   );
 }

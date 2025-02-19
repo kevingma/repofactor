@@ -5,7 +5,7 @@
   "private": true,
   "exports": {
     "./components/*": "./src/components/*.tsx",
-    "./hooks/*": "./src/hooks/*.ts",
+    "./hooks/*": "./src/hooks/*.tsx",
     "./lib/*": "./src/lib/*.ts",
     "./types/*": "./src/types/*.ts",
     "./views/*": "./src/views/*.tsx",
@@ -30,7 +30,10 @@
   },
   "dependencies": {
     "@radix-ui/react-checkbox": "^1.1.4",
+    "@radix-ui/react-dialog": "^1.1.6",
+    "@radix-ui/react-separator": "^1.1.2",
     "@radix-ui/react-slot": "^1.1.1",
+    "@radix-ui/react-tooltip": "^1.1.8",
     "@tauri-apps/plugin-dialog": "^2.2.0",
     "@tauri-apps/plugin-fs": "^2.2.0",
     "autoprefixer": "^10.4.20",
