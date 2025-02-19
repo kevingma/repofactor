@@ -1,4 +1,4 @@
-import parser from "@babel/parser";
+import { parse } from "@babel/parser";
 import traverse from "@babel/traverse";
 import type { NodePath } from "@babel/traverse";
 import * as t from "@babel/types";
@@ -12,7 +12,7 @@ import { createAstNodeInNeo4j, createAstRelationshipInNeo4j } from "./neo4jConne
  */
 export async function parseJsOrTsFile(code: string, filePath: string) {
   // 1. Parse code with Babel parser using TS + JSX plugins
-  const ast = parser.parse(code, {
+  const ast = parse(code, {
     sourceType: "module",
     plugins: ["typescript", "jsx"],
   });
