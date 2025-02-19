@@ -18,7 +18,7 @@ export const AnalyzeTextView = () => {
   const [sourceText, setSourceText] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<TextAnalysisResult | null>(null);
-  const apiBaseUrl = "http://localhost:3000";
+  const apiBaseUrl = "http://localhost:1420";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

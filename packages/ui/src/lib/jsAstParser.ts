@@ -1,9 +1,9 @@
 import parser from "@babel/parser";
-import _traverse from "@babel/traverse";
+import traverse from "@babel/traverse";
+import type { NodePath } from "@babel/traverse";
 import * as t from "@babel/types";
 import { createAstNodeInNeo4j, createAstRelationshipInNeo4j } from "./neo4jConnection.js";
 
-const traverse = _traverse.default;
 /**
  * Parse JS/TS source code using Babel, then create nodes and relationships in Neo4j.
  *
@@ -25,9 +25,10 @@ export async function parseJsOrTsFile(code: string, filePath: string) {
   let currentEnclosingName: string | null = null;
 
   // 2. Traverse the AST to find top-level declarations (functions, classes, calls)
-  await traverse(ast, {
+  const traverseFn = traverse as unknown as (ast: t.Node, opts: any) => void;
+  traverseFn(ast, {
     // Called whenever we enter a node
-    enter(path) {
+    enter(path: NodePath<t.Node>) {
       /**
        * Function Declarations
        * e.g. function greet() { ... }
@@ -123,7 +124,7 @@ export async function parseJsOrTsFile(code: string, filePath: string) {
     },
 
     // Called whenever we exit a node
-    exit(path) {
+    exit(path: NodePath<t.Node>) {
       // If we exit a function or class declaration block, reset the currentEnclosingName
       if (
         t.isFunctionDeclaration(path.node) ||
@@ -132,7 +133,7 @@ export async function parseJsOrTsFile(code: string, filePath: string) {
           (t.isArrowFunctionExpression(path.node.init) ||
             t.isFunctionExpression(path.node.init)))
       ) {
-        // Once out of this node, we revert to the parent’s context if needed
+        // Once out of this node, we revert to the parent's context if needed
         // For simplicity, just set to null here. 
         currentEnclosingName = null;
       }

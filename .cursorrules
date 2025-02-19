@@ -1,0 +1,184 @@
+You are an expert in developing desktop applications using Tauri with Next.js and TypeScript for the frontend.
+
+Key Principles:
+- Write clear, technical responses with precise examples for Tauri, Next.js, and TypeScript.
+- Prioritize type safety and utilize TypeScript features effectively.
+- Follow best practices for Tauri application development, including security considerations.
+- Implement responsive and efficient UIs using Next.js (React) and shadcn component libraries.
+- Ensure smooth communication between the Tauri frontend and external backend services.
+
+Frontend (Tauri + Next.js + TypeScript):
+Next.js + TypeScript:
+- Leverage Next.js for page routing, API routes, and server-side rendering (when appropriate).
+- Use TypeScript to ensure strong typing and improved code quality.
+
+shadcn UI Components:
+- Utilize shadcn libraries (built on top of Radix UI and Tailwind CSS) to rapidly build accessible and reusable UI components.
+- Keep your UI consistent and maintainable by following a design system.
+
+Tauri Integration:
+- Use Tauri’s APIs for native desktop features (file system access, system tray, window management, etc.).
+- Carefully configure Tauri’s tauri.conf.json to control which APIs are exposed for security.
+
+State Management:
+- Manage state in React using Hooks (e.g., useState, useReducer, or context-based solutions).
+- Alternatively, consider Redux, Zustand, or other libraries if your application grows in complexity.
+
+Reusable Components:
+- Structure your React components for maximum reusability and clarity.
+- Follow Next.js conventions for naming components and organizing them within your project (e.g., components/ directory).
+
+Communication with Backend
+HTTP Requests:
+- Use Axios (or Fetch API) for performing HTTP requests from your Tauri frontend to the external backend.
+- Maintain clear separation of concerns by abstracting API calls into a dedicated service or hooks.
+
+Error Handling:
+- Implement robust error handling for network requests and responses.
+- Provide clear feedback to users in case of request failures or timeouts.
+
+TypeScript Interfaces:
+- Define and maintain interfaces for request/response payloads, ensuring type safety across your application.
+- Keep these interfaces in a dedicated types/ folder or co-locate them with relevant services.
+
+Versioning Strategy:
+- Consider basic API versioning if your backend endpoints evolve over time.
+- Ensure backward compatibility for older versions if necessary.
+
+CORS Considerations:
+- When communicating with an external backend, configure CORS properly on the backend side.
+- Ensure Tauri’s security settings allow the necessary requests and origins.
+
+Security
+IPC and Native API Access:
+- Limit the scope of Tauri’s IPC (Inter-Process Communication). Only expose the minimal required functionality.
+- Review Tauri’s Security Model to ensure your application adheres to best practices.
+
+Input Validation:;
+- Sanitize and validate all input from the user to avoid injection attacks.
+- Use libraries or built-in Next.js features (where applicable) to validate incoming data on API routes.
+
+HTTPS:
+- Always use HTTPS for communication with external services, if not managed directly by Tauri for local calls.
+- Enforce secure cookies and consider adding CSRF protection on the backend if necessary.
+
+Authentication and Authorization:
+- If your application deals with user logins or sensitive data, implement proper session handling and token-based authentication.
+- Restrict Tauri’s allowlist in tauri.conf.json to only the APIs you truly need.
+
+Performance Optimization
+Efficient Rendering:
+- Use React’s memoization (React.memo, useMemo, useCallback) where appropriate to avoid unnecessary re-renders.
+- Split your code into smaller components to improve maintainability and performance.
+
+Lazy Loading:
+- Utilize dynamic imports (next/dynamic) for Next.js to lazy-load components and reduce initial bundle size.
+- Only load shadcn components or other heavy libraries when needed.
+
+Caching:
+- Employ caching strategies for data fetched frequently from the backend (e.g., React Query or SWR).
+- Consider caching static assets and results of expensive operations.
+
+Tauri-Specific Optimizations:
+- Leverage Tauri’s resource optimization to keep your desktop app lightweight.
+- Adjust Tauri’s build configuration to minimize the final bundle size.
+
+Testing
+Unit Tests:
+- Use Jest and React Testing Library to test Next.js components.
+- Write comprehensive tests for your shared utilities and hooks.
+
+Integration & E2E Tests:
+- Consider Cypress or Playwright for end-to-end testing of critical flows in your Tauri app.
+- Test Tauri-specific features (like file system access) with appropriate mocking or in a controlled environment.
+
+Mocking:
+- Mock backend requests using libraries like msw (Mock Service Worker) or Jest mocks.
+- Ensure your test environment is isolated from real external services.
+
+Tauri Feature Testing:
+- Test IPC calls, window events, and other Tauri-native features thoroughly.
+- Keep track of any platform-specific quirks (Windows, macOS, Linux).
+
+Build and Deployment
+Next.js Build:
+- Utilize Next.js build commands (next build) for production-ready bundles.
+- Ensure next.config.js is configured correctly for your application’s needs.
+
+Tauri Packaging:
+- Use Tauri’s CLI tools to build, sign, and package your application for different platforms.
+- Configure tauri.conf.json for release channels, auto-updates, and resource bundling.
+
+Environment Configuration:
+- Maintain separate environments (development, staging, production) for Next.js.
+- Control environment variables through Next.js .env files and Tauri’s build-time environment variables.
+
+Automatic Updates:
+- Leverage Tauri’s built-in updater for seamless user updates.
+- Configure your update server or GitHub Releases to distribute new application versions.
+
+Key Conventions
+1. Consistent Code Style:
+Use tools like Prettier and ESLint to maintain a unified code style across your team.
+
+2. Descriptive Naming:
+Follow Next.js conventions for file-based routing (e.g., pages/index.tsx, pages/dashboard.tsx).
+Give meaningful names to components, hooks, and variables.
+
+3. Clear Comments:
+Focus on explaining why the code is written in a certain way, rather than what the code does.
+
+4. Project Structure:
+Separate concerns by organizing components, pages, hooks, and utilities logically (e.g., components/, pages/, hooks/, utils/).
+Keep your codebase readable and maintainable as the project grows.
+
+Dependencies:
+- Tauri
+- Next.js
+- TypeScript
+- Axios (or Fetch API)
+- shadcn (for UI components)
+
+Refer to official documentation for Tauri, Next.js, TypeScript, and shadcn for best practices and up-to-date APIs.
+
+Note on Backend Communication
+- When working with an external Python backend (or any other language/framework):
+- Handle potential backend failures, network slowness, and timeouts gracefully.
+- Consider implementing retries or exponential backoff for failed requests.
+- Use JSON or a suitable serialization format for complex data structures.
+- Log errors and responses in development mode to aid debugging.
+
+## Project Overview
+## Overview
+Repofactor is a crossplatform desktop application designed to aid engineers in refactoring codebases to align with clean architecture principles through intelligent analysis and safe refactoring. It combines static analysis with architectural pattern recognition to systematically improve code qualtiy while maintaining system behavior.
+
+## Behavior
+1. Analyze Code: Run static code analysis on the codebase to identify areas for improvement (code smells, architectural violations, deviations from clean coding).
+2. Map Architecture: Automatically identify the current code structure and map it to a clean architecture model.
+3. Propose Refactorings: Generate refactoring suggestions based on the code analysis and architectural mapping (modularization, decoupling, enhancing testability).
+4. Automate Refactorings: Apply safe, automated refactorings that adhere to best practices.
+5. Generate Reports: Provide detailed before-and-after reports of the code changes.
+6. Enable Rollback: Allow users to rollback changes if automated refactorings fail integration tests.
+
+## Architecture
+Users will be directed through a multi-step workflow.
+1. Users select a folder from their local machine that contains the repository they would like to be analyzed.
+2. Users are presented with their directory with every folder and file selected, and can make initial removals of folders that they do not want to be analyzed (e.g auto-generated files, dependency files, etc.)
+3. RepoFactor automatically generates a text based representation of the entire file tree except for the files and folders the user removed in step 2.
+4. RepoFactor generates a code map that parses entities like classes, methods, functions, and their interrelations using AST parsers and mapping all the relationships algorithmically and saving them to a Neo4j graph database.
+	1. RepoFactor generates an architecture of the codebase using our [[Architectural Prompt]].
+	2. Future Feature (Low Priority): RepoFactor implements a RAG system that understands not only community summaries like graphRAG but also relevant node/edge details, node code, and encoded graph structure. RepoFactor prunes irrelevant nodes and summaries to optimize token usage. To be used with local LLMs.
+5. RepoFactor visualizes the codebase through a graphical node-based visualizer and allows users to deselect nodes that they wish to exclude.
+6. RepoFactor presents the user with options for generating refactoring suggestions (modularization, decoupling, enhancing testability, general suggestions). Depending on the users selections, run unique prompts for each on the selected codebase and nodes.
+7. RepoFactor allows the user to approve/deny specific refactorings, then uses a version control system to save the codebase at unique checkpoints before each step of refactoring.
+8. RepoFactor presents the updated codebase and allows the user to rollback or continue refactoring.
+
+## Rules
+- Prioritize refactorings that improve adherence to clean architecture principles.
+- Ensure that automated refactorings preserve the existing code behavior.
+- Only suggest or apply refactorings that are considered safe and follow best practices.
+
+## Additional Features
+- User-Friendly Interface: Implement a clear and intuitive interface for developers to review and apply refactoring suggestions.
+- Integration with Version Control: Integrate the tool with version control systems to track changes and enable easy rollback.
+- Incremental Refactoring: Allow developers to apply refactorings incrementally and review the impact at each step.
