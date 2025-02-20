@@ -20,7 +20,12 @@ interface FsEntry {
 interface ParserResult {
   filePath: string;
   nodes: Array<{
-    type: "FunctionDeclaration" | "ClassDeclaration" | "FunctionExpression" | "FunctionReference";
+    type:
+      | "FunctionDeclaration"
+      | "ClassDeclaration"
+      | "FunctionExpression"
+      | "FunctionReference"
+      | "AnonymousFunction";
     name: string;
   }>;
   relationships: Array<{
@@ -93,34 +98,36 @@ export function AnalysisLoadingView({ fsTree, parserResults }: AnalysisLoadingVi
         {fileMap || "No files selected."}
       </div>
 
-      {/* New: Display parser results if available */}
+      {/* Display parser results in a scrollable box */}
       {parserResults && parserResults.length > 0 && (
         <div className="mt-4 border-t pt-4 w-full max-w-xl">
           <h2 className="text-2xl font-semibold mb-2">Parser Results</h2>
-          {parserResults.map((res, idx) => (
-            <div key={idx} className="mb-4 text-sm">
-              <p className="font-medium">File: {res.filePath}</p>
-              <ul className="list-disc ml-5">
-                {res.nodes.map((n, i) => (
-                  <li key={i}>
-                    Found {n.type} named <strong>{n.name}</strong>
-                  </li>
-                ))}
-              </ul>
-              {res.relationships.length > 0 && (
-                <>
-                  <p className="mt-2 font-medium">Relationships:</p>
-                  <ul className="list-disc ml-5">
-                    {res.relationships.map((r, j) => (
-                      <li key={j}>
-                        {r.caller} {r.relationshipType} {r.callee}
-                      </li>
-                    ))}
-                  </ul>
-                </>
-              )}
-            </div>
-          ))}
+          <div className="border border-muted rounded-md bg-background w-full p-4 mt-2 overflow-y-auto h-64 text-sm">
+            {parserResults.map((res, idx) => (
+              <div key={idx} className="mb-4">
+                <p className="font-medium">File: {res.filePath}</p>
+                <ul className="list-disc ml-5">
+                  {res.nodes.map((n, i) => (
+                    <li key={i}>
+                      Found {n.type} named <strong>{n.name}</strong>
+                    </li>
+                  ))}
+                </ul>
+                {res.relationships.length > 0 && (
+                  <>
+                    <p className="mt-2 font-medium">Relationships:</p>
+                    <ul className="list-disc ml-5">
+                      {res.relationships.map((r, j) => (
+                        <li key={j}>
+                          {r.caller} {r.relationshipType} {r.callee}
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
