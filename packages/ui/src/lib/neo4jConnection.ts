@@ -46,6 +46,55 @@ export async function createAstRelationshipInNeo4j(callerName: string, calleeNam
   }
 }
 
+/**
+ * Create a 'LintIssue' node in Neo4j and link it to an existing or
+ * newly created AstNode for the file path.
+ */
+export async function createLintIssueInNeo4j(params: {
+  filePath: string;
+  ruleId: string;
+  severity: number;
+  message: string;
+  line: number;
+  column: number;
+}) {
+  const { filePath, ruleId, severity, message, line, column } = params;
+  const session = driver.session({ database: "neo4j" });
+
+  try {
+    // Ensure there's an AstNode for this file if it does not exist
+    // Then create a new LintIssue node and connect it
+    const query = `
+      MERGE (file:AstNode { filePath: $filePath })
+      CREATE (issue:LintIssue {
+        ruleId: $ruleId,
+        severity: $severity,
+        message: $message,
+        line: $line,
+        column: $column
+      })
+      CREATE (file)-[:HAS_LINT_ISSUE]->(issue)
+      RETURN issue
+    `;
+
+    const result = await session.run(query, {
+      filePath,
+      ruleId,
+      severity,
+      message,
+      line,
+      column,
+    });
+
+    return result.records;
+  } catch (error) {
+    console.error("Error in createLintIssueInNeo4j:", error);
+    throw error;
+  } finally {
+    await session.close();
+  }
+}
+
 export async function closeNeo4jConnection() {
   console.log("[DEBUG] Closing Neo4j connection");
   if (driver) {
