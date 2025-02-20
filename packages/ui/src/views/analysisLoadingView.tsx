@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { ParserResult } from "@repo/ui/lib/jsAstParser";
 
 /**
  * Data structure representing each file or folder.
@@ -12,27 +13,6 @@ interface FsEntry {
   isExpanded: boolean;
   children: FsEntry[];
   language?: string;
-}
-
-/**
- * Data structure for parser results.
- */
-interface ParserResult {
-  filePath: string;
-  nodes: Array<{
-    type:
-      | "FunctionDeclaration"
-      | "ClassDeclaration"
-      | "FunctionExpression"
-      | "FunctionReference"
-      | "AnonymousFunction";
-    name: string;
-  }>;
-  relationships: Array<{
-    caller: string;
-    callee: string;
-    relationshipType: string;
-  }>;
 }
 
 interface AnalysisLoadingViewProps {

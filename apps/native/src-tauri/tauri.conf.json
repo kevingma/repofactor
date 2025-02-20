@@ -13,8 +13,8 @@
     "windows": [
       {
         "title": "RepoFactor",
-        "width": 2000,
-        "height": 1200
+        "width": 1100,
+        "height": 800
       }
     ],
     "security": {
