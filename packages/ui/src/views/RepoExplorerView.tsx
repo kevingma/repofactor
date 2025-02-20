@@ -2,7 +2,7 @@ import React, { useState, useCallback } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { readDir, readTextFile } from "@tauri-apps/plugin-fs";
 import { join } from "@tauri-apps/api/path";
-import { parseJsOrTsFile } from "@repo/ui/lib/jsAstParser"; // <-- NEW import
+import { parseJsOrTsFile, ParserResult } from "@repo/ui/lib/jsAstParser";
 import { Button } from "@repo/ui/components/button";
 import { Checkbox } from "@repo/ui/components/checkbox";
 import { Folder, File, ChevronRight, ChevronDown } from "lucide-react";
@@ -24,22 +24,7 @@ function detectLanguage(filePath: string): string | undefined {
   const lower = filePath.toLowerCase();
   if (lower.endsWith(".ts") || lower.endsWith(".tsx")) return "typescript";
   if (lower.endsWith(".js") || lower.endsWith(".jsx")) return "javascript";
-  if (lower.endsWith(".py")) return "python";
-  if (lower.endsWith(".java")) return "java";
-  if (
-    lower.endsWith(".c") ||
-    lower.endsWith(".h") ||
-    lower.endsWith(".cpp") ||
-    lower.endsWith(".hpp")
-  )
-    return "c/c++";
-  if (lower.endsWith(".cs")) return "c#";
-  if (lower.endsWith(".go")) return "go";
-  if (lower.endsWith(".php")) return "php";
-  if (lower.endsWith(".rb")) return "ruby";
-  if (lower.endsWith(".rs")) return "rust";
-  if (lower.endsWith(".swift")) return "swift";
-  if (lower.endsWith(".kt") || lower.endsWith(".kts")) return "kotlin";
+  // ... etc.
   return undefined;
 }
 
@@ -48,7 +33,7 @@ async function readFsEntries(dirPath: string): Promise<FsEntry[]> {
   const result: FsEntry[] = [];
 
   for (const entry of entries) {
-    if (entry.name.startsWith(".")) continue; // ignore hidden files/folders
+    if (entry.name.startsWith(".")) continue; // ignore hidden/ dot-files
     const fullPath = await join(dirPath, entry.name);
 
     let children: FsEntry[] = [];
@@ -92,10 +77,9 @@ function setCheckedForAll(entries: FsEntry[], checked: boolean): FsEntry[] {
   return entries.map((entry) => ({
     ...entry,
     isChecked: checked,
-    children:
-      entry.children.length > 0
-        ? setCheckedForAll(entry.children, checked)
-        : entry.children,
+    children: entry.isDirectory
+      ? setCheckedForAll(entry.children, checked)
+      : entry.children,
   }));
 }
 
@@ -121,7 +105,6 @@ function toggleChecked(entries: FsEntry[], pathToToggle: string): FsEntry[] {
   });
 }
 
-// NEW helper to gather all selected files from the FsEntry tree
 function gatherSelectedFiles(entries: FsEntry[]): FsEntry[] {
   let files: FsEntry[] = [];
   for (const e of entries) {
@@ -141,6 +124,9 @@ export function RepoExplorerView() {
   const [selectedFileContent, setSelectedFileContent] = useState("");
   const [error, setError] = useState("");
   const [analysisInProgress, setAnalysisInProgress] = useState(false);
+
+  // NEW: store parser results
+  const [parserResults, setParserResults] = useState<ParserResult[]>([]);
 
   const handleSelectRepository = useCallback(async () => {
     setError("");
@@ -187,10 +173,7 @@ export function RepoExplorerView() {
       const hasChildren = entry.children.length > 0;
 
       return (
-        <div
-          key={entry.path}
-          className={cn(indentClass, "flex flex-col py-0.5 text-xs")}
-        >
+        <div key={entry.path} className={cn(indentClass, "flex flex-col py-0.5 text-xs")}>
           <div className="flex items-center space-x-1">
             {entry.isDirectory ? (
               <div
@@ -239,23 +222,25 @@ export function RepoExplorerView() {
     });
   };
 
-  // MODIFIED to run parseJsOrTsFile on all selected .js/.ts files
   const handleProceedClick = async () => {
     try {
       // Gather only the selected files
       const selectedFiles = gatherSelectedFiles(fsTree);
+      const allResults = [];
 
-      // Run AST parser on each JavaScript/TypeScript file
       for (const file of selectedFiles) {
         if (
           file.language === "javascript" ||
           file.language === "typescript"
         ) {
           const content = await readTextFile(file.path);
-          // call the parser which updates Neo4j
-          await parseJsOrTsFile(content, file.path);
+          const result = await parseJsOrTsFile(content, file.path);
+          // Keep track of what we found per file
+          allResults.push(result);
         }
       }
+
+      setParserResults(allResults);
 
       // Once parsing is done, show the analysis screen
       setAnalysisInProgress(true);
@@ -266,7 +251,9 @@ export function RepoExplorerView() {
   };
 
   if (analysisInProgress) {
-    return <AnalysisLoadingView fsTree={fsTree} />;
+    return (
+      <AnalysisLoadingView fsTree={fsTree} parserResults={parserResults} />
+    );
   }
 
   return (
@@ -305,6 +292,37 @@ export function RepoExplorerView() {
             <p className="text-sm text-muted-foreground">
               Select a file from the sidebar to view its contents.
             </p>
+          )}
+
+          {/* Display parser results below the file content */}
+          {parserResults.length > 0 && (
+            <div className="mt-4 border-t pt-4">
+              <h2 className="font-bold text-lg mb-2">Parser Results</h2>
+              {parserResults.map((res, idx) => (
+                <div key={idx} className="mb-4 text-sm">
+                  <p className="font-medium">File: {res.filePath}</p>
+                  <ul className="list-disc ml-5">
+                    {res.nodes.map((n, i) => (
+                      <li key={i}>
+                        Found {n.type} named <strong>{n.name}</strong>
+                      </li>
+                    ))}
+                  </ul>
+                  {res.relationships.length > 0 && (
+                    <>
+                      <p className="mt-2 font-medium">Relationships:</p>
+                      <ul className="list-disc ml-5">
+                        {res.relationships.map((r, j) => (
+                          <li key={j}>
+                            {r.caller} {r.relationshipType} {r.callee}
+                          </li>
+                        ))}
+                      </ul>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
           )}
         </div>
         {fsTree.length > 0 && (
