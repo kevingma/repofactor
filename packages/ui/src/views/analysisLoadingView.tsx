@@ -1,9 +1,21 @@
 import React, { useState, useEffect } from "react";
 import { ParserResult } from "@repo/ui/lib/jsAstParser";
 
-/**
- * Data structure representing each file or folder.
- */
+/** Re-export or define lint result structures here, if needed */
+export interface LintMessage {
+  ruleId: string | null;
+  severity: number;
+  message: string;
+  line: number;
+  column: number;
+}
+export interface LintResult {
+  filePath: string;
+  errorCount: number;
+  warningCount: number;
+  messages: LintMessage[];
+}
+
 interface FsEntry {
   path: string;
   name: string;
@@ -18,52 +30,62 @@ interface FsEntry {
 interface AnalysisLoadingViewProps {
   fsTree: FsEntry[];
   parserResults?: ParserResult[];
+  lintResults?: LintResult[];
+  onDone?: () => void; // <-- new callback
 }
 
-/**
- * Recursively generate a string-based file map using
- * box-drawing characters (├──, └──, etc).
- */
+/** Utility to generate a file-map preview */
 function generateFileMapString(entries: FsEntry[], prefix = ""): string {
   return entries
     .filter((e) => e.isChecked)
     .map((entry, index, arr) => {
       const isLast = index === arr.length - 1;
       const branch = isLast ? "└── " : "├── ";
-
       let line = `${prefix}${branch}${entry.name}`;
-
       if (entry.isDirectory && entry.children.length > 0) {
         const newPrefix = prefix + (isLast ? "    " : "│   ");
         line += "\n" + generateFileMapString(entry.children, newPrefix);
       }
-
       return line;
     })
     .join("\n");
 }
 
-export function AnalysisLoadingView({ fsTree, parserResults }: AnalysisLoadingViewProps) {
+export function AnalysisLoadingView({
+  fsTree,
+  parserResults,
+  lintResults,
+  onDone,
+}: AnalysisLoadingViewProps) {
   const [progress, setProgress] = useState(0);
 
-  // Simulate analysis progress
   useEffect(() => {
     const interval = setInterval(() => {
       setProgress((prev) => {
         const next = prev + 5;
         return next > 100 ? 100 : next;
       });
-    }, 500);
+    }, 400);
 
     return () => clearInterval(interval);
   }, []);
+
+  // Once progress hits 100, notify parent to switch views
+  useEffect(() => {
+    if (progress >= 100 && onDone) {
+      // small delay so user sees 100% momentarily
+      const timer = setTimeout(() => {
+        onDone();
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [progress, onDone]);
 
   const fileMap = generateFileMapString(fsTree);
 
   return (
     <div className="h-screen flex flex-col items-center justify-center p-4 space-y-4">
       <h1 className="text-2xl font-semibold">Analyzing Your Codebase...</h1>
-
       {/* Progress bar */}
       <div className="w-full max-w-xl bg-secondary rounded-full h-4">
         <div
@@ -73,12 +95,12 @@ export function AnalysisLoadingView({ fsTree, parserResults }: AnalysisLoadingVi
       </div>
       <p>{progress}%</p>
 
-      {/* Show a scrollable file map preview */}
+      {/* Show file map preview */}
       <div className="border border-muted rounded-md bg-background w-full max-w-xl p-4 mt-4 overflow-y-auto h-64 text-sm font-mono whitespace-pre leading-5">
         {fileMap || "No files selected."}
       </div>
 
-      {/* Display parser results in a scrollable box */}
+      {/* Parser Results */}
       {parserResults && parserResults.length > 0 && (
         <div className="mt-4 border-t pt-4 w-full max-w-xl">
           <h2 className="text-2xl font-semibold mb-2">Parser Results</h2>
@@ -108,6 +130,17 @@ export function AnalysisLoadingView({ fsTree, parserResults }: AnalysisLoadingVi
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Lint Results (brief mention, full results on next page) */}
+      {lintResults && lintResults.length > 0 && (
+        <div className="mt-4 border-t pt-4 w-full max-w-xl">
+          <h2 className="text-2xl font-semibold mb-2">Lint Summary</h2>
+          <p className="text-sm">
+            {lintResults.length} file(s) linted. Detailed results will appear in
+            the next step.
+          </p>
         </div>
       )}
     </div>

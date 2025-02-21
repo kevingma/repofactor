@@ -62,28 +62,28 @@ export async function createLintIssueInNeo4j(params: {
   const session = driver.session({ database: "neo4j" });
 
   try {
-    // Ensure there's an AstNode for this file if it does not exist
-    // Then create a new LintIssue node and connect it
+    // Updated query: change $line and $column to $lineNumber and $columnNumber
     const query = `
       MERGE (file:AstNode { filePath: $filePath })
       CREATE (issue:LintIssue {
         ruleId: $ruleId,
         severity: $severity,
         message: $message,
-        line: $line,
-        column: $column
+        line: $lineNumber,
+        column: $columnNumber
       })
       CREATE (file)-[:HAS_LINT_ISSUE]->(issue)
       RETURN issue
     `;
 
+    // Update parameter keys accordingly
     const result = await session.run(query, {
       filePath,
       ruleId,
       severity,
       message,
-      line,
-      column,
+      lineNumber: line,
+      columnNumber: column,
     });
 
     return result.records;

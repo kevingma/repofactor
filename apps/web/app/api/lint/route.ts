@@ -3,10 +3,22 @@ import { ESLint } from "eslint";
 import { createLintIssueInNeo4j } from "@repo/ui/lib/neo4jConnection";
 import sonarjs from "eslint-plugin-sonarjs";
 
+// Add OPTIONS endpoint for CORS preflight support
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 204,
+    headers: {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
+    },
+  });
+}
+
 /**
  * Expected payload:
  * {
- *   "files": ["/absolute/path/to/file1.ts", "/absolute/path/to/file2.js", ...]
+ *   "files": ["/absolute/path/to/file1.ts", "/absolute/path/to/file2.ts", ...]
  * }
  */
 export async function POST(request: NextRequest) {
@@ -21,42 +33,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Initialize a programmatic ESLint instance with dynamic parser overrides
+    // Initialize a programmatic ESLint instance with SonarJS
+    // Note: Make sure 'eslint-plugin-sonarjs' and other necessary ESLint
+    // dependencies are installed in your project.
     const eslint = new ESLint({
-      useEslintrc: false,
-      overrideConfig: {
+      // "fix": false, // If you want auto-fixes, set to true
+      overrideConfig: ({
+        ignore: false,
+        plugins: { sonarjs },
+        extends: [
+          "plugin:sonarjs/recommended"
+        ],
+        ignorePatterns: [],
         parserOptions: {
           ecmaVersion: "latest",
-          sourceType: "module",
-        },
-        overrides: [
-          // TypeScript overrides
-          {
-            files: ["**/*.ts", "**/*.tsx"],
-            parser: "@typescript-eslint/parser",
-            parserOptions: {
-              ecmaVersion: "latest",
-              sourceType: "module",
-            },
-            extends: [
-              "plugin:@typescript-eslint/recommended",
-              "plugin:sonarjs/recommended",
-            ],
-            plugins: ["@typescript-eslint", "sonarjs"],
-          },
-          // JavaScript overrides
-          {
-            files: ["**/*.js", "**/*.jsx"],
-            parser: "espree",
-            parserOptions: {
-              ecmaVersion: "latest",
-              sourceType: "module",
-            },
-            extends: ["plugin:sonarjs/recommended"],
-            plugins: ["sonarjs"],
-          },
-        ],
-      },
+          sourceType: "module"
+        }
+      } as any),
+      // If you want to lint TypeScript code that requires type information,
+      // set "useEslintrc: false" and specify `tsconfig` in parserOptions above.
     });
 
     // Lint the user-selected files
@@ -67,14 +62,14 @@ export async function POST(request: NextRequest) {
       const { filePath, messages } = fileResult;
 
       for (const msg of messages) {
-        // You could filter out "warning"-level issues if desired
+        // Use default values (0) for line and column if they're not provided
         await createLintIssueInNeo4j({
           filePath,
           ruleId: msg.ruleId ?? "unknown-rule",
           severity: msg.severity, // 1 = warning, 2 = error
           message: msg.message,
-          line: msg.line,
-          column: msg.column,
+          line: msg.line ?? 0,
+          column: msg.column ?? 0,
         });
       }
     }

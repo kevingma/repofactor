@@ -8,7 +8,10 @@ import { Checkbox } from "@repo/ui/components/checkbox";
 import { Folder, File, ChevronRight, ChevronDown } from "lucide-react";
 import { cn } from "@repo/ui/lib/utils";
 import { AnalysisLoadingView } from "@repo/ui/views/analysisLoadingView";
+import { LintResult } from "@repo/ui/views/analysisLoadingView"; // We'll define it there or in a separate types file
+import { LintResultsView } from "@repo/ui/views/LintResultsView";
 
+/** Shared FS entry definition */
 interface FsEntry {
   path: string;
   name: string;
@@ -24,7 +27,6 @@ function detectLanguage(filePath: string): string | undefined {
   const lower = filePath.toLowerCase();
   if (lower.endsWith(".ts") || lower.endsWith(".tsx")) return "typescript";
   if (lower.endsWith(".js") || lower.endsWith(".jsx")) return "javascript";
-  // ... etc.
   return undefined;
 }
 
@@ -33,7 +35,7 @@ async function readFsEntries(dirPath: string): Promise<FsEntry[]> {
   const result: FsEntry[] = [];
 
   for (const entry of entries) {
-    if (entry.name.startsWith(".")) continue; // ignore hidden/ dot-files
+    if (entry.name.startsWith(".")) continue; // ignore hidden/dot-files
     const fullPath = await join(dirPath, entry.name);
 
     let children: FsEntry[] = [];
@@ -123,10 +125,14 @@ export function RepoExplorerView() {
   const [fsTree, setFsTree] = useState<FsEntry[]>([]);
   const [selectedFileContent, setSelectedFileContent] = useState("");
   const [error, setError] = useState("");
-  const [analysisInProgress, setAnalysisInProgress] = useState(false);
 
-  // NEW: store parser results
+  // For AST parser
+  const [analysisInProgress, setAnalysisInProgress] = useState(false);
+  const [analysisComplete, setAnalysisComplete] = useState(false);
   const [parserResults, setParserResults] = useState<ParserResult[]>([]);
+
+  // For Lint
+  const [lintResults, setLintResults] = useState<LintResult[]>([]);
 
   const handleSelectRepository = useCallback(async () => {
     setError("");
@@ -224,35 +230,63 @@ export function RepoExplorerView() {
 
   const handleProceedClick = async () => {
     try {
-      // Gather only the selected files
       const selectedFiles = gatherSelectedFiles(fsTree);
-      const allResults = [];
+      const allParserResults: ParserResult[] = [];
 
+      // 1) Parse AST
       for (const file of selectedFiles) {
-        if (
-          file.language === "javascript" ||
-          file.language === "typescript"
-        ) {
+        if (file.language === "javascript" || file.language === "typescript") {
           const content = await readTextFile(file.path);
           const result = await parseJsOrTsFile(content, file.path);
-          // Keep track of what we found per file
-          allResults.push(result);
+          allParserResults.push(result);
         }
       }
+      setParserResults(allParserResults);
 
-      setParserResults(allResults);
+      // 2) Lint files
+      const filePaths = selectedFiles.map((f) => f.path);
+      const lintResponse = await fetch("http://localhost:3000/api/lint", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ files: filePaths }),
+      });
+      if (!lintResponse.ok) {
+        throw new Error(`Linting failed: ${lintResponse.statusText}`);
+      }
+      const lintData = await lintResponse.json();
+      setLintResults(lintData.results || []);
 
-      // Once parsing is done, show the analysis screen
+      // 3) Transition to "analysis" mode
       setAnalysisInProgress(true);
     } catch (err) {
-      console.error("Error parsing AST:", err);
+      console.error("Error parsing/linting:", err);
       setError(String(err));
     }
   };
 
-  if (analysisInProgress) {
+  // Rendering logic: 3 states
+  // 1) Normal explorer
+  // 2) AnalysisLoadingView (when analysisInProgress && !analysisComplete)
+  // 3) LintResultsView (when analysisComplete)
+  if (analysisInProgress && !analysisComplete) {
     return (
-      <AnalysisLoadingView fsTree={fsTree} parserResults={parserResults} />
+      <AnalysisLoadingView
+        fsTree={fsTree}
+        parserResults={parserResults}
+        lintResults={lintResults}
+        onDone={() => setAnalysisComplete(true)}
+      />
+    );
+  }
+
+  if (analysisComplete) {
+    // Show lint results in a dedicated page
+    return (
+      <LintResultsView
+        fsTree={fsTree}
+        parserResults={parserResults}
+        lintResults={lintResults}
+      />
     );
   }
 
@@ -292,37 +326,6 @@ export function RepoExplorerView() {
             <p className="text-sm text-muted-foreground">
               Select a file from the sidebar to view its contents.
             </p>
-          )}
-
-          {/* Display parser results below the file content */}
-          {parserResults.length > 0 && (
-            <div className="mt-4 border-t pt-4">
-              <h2 className="font-bold text-lg mb-2">Parser Results</h2>
-              {parserResults.map((res, idx) => (
-                <div key={idx} className="mb-4 text-sm">
-                  <p className="font-medium">File: {res.filePath}</p>
-                  <ul className="list-disc ml-5">
-                    {res.nodes.map((n, i) => (
-                      <li key={i}>
-                        Found {n.type} named <strong>{n.name}</strong>
-                      </li>
-                    ))}
-                  </ul>
-                  {res.relationships.length > 0 && (
-                    <>
-                      <p className="mt-2 font-medium">Relationships:</p>
-                      <ul className="list-disc ml-5">
-                        {res.relationships.map((r, j) => (
-                          <li key={j}>
-                            {r.caller} {r.relationshipType} {r.callee}
-                          </li>
-                        ))}
-                      </ul>
-                    </>
-                  )}
-                </div>
-              ))}
-            </div>
           )}
         </div>
         {fsTree.length > 0 && (
