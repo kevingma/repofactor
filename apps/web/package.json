@@ -11,6 +11,7 @@
     "check-types": "tsc --noEmit"
   },
   "dependencies": {
+    "@ast-grep/cli": "^0.35.0",
     "@repo/ui": "workspace:*",
     "lucide-react": "^0.474.0",
     "mongoose": "^8.9.5",

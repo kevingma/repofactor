@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAstGrepIssueInNeo4j } from "@repo/ui/lib/neo4jConnection";
 import { spawn } from "child_process";
 import path from "path";
-import os from "os";
+import fs from "fs";
 
 /**
  * This route will accept a POST body like:
@@ -14,14 +14,17 @@ import os from "os";
  * parse the JSON output, store each issue in Neo4j, and return the results.
  */
 
-// For demonstration, assume we cloned or installed ast-grep-essentials rules under project root.
-// Adjust the absolute path to your real local location of "ast-grep-essentials/rules/javascript/"
-const AST_GREP_RULES_DIR = path.join(
+// Define the rules directory and collect all .yml rule files
+const RULES_DIR = path.join(
   process.cwd(),
   "ast-grep-essentials",
   "rules",
-  "javascript"
+  "javascript",
+  "security"
 );
+const ruleFiles = fs.readdirSync(RULES_DIR)
+  .filter((file) => file.endsWith(".yml"))
+  .map((file) => path.join(RULES_DIR, file));
 
 export async function OPTIONS() {
   return new NextResponse(null, {
@@ -50,27 +53,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // We'll run ast-grep via child_process spawn,
-    // passing in:
-    //   - `scan`
-    //   - `--json` for JSON output
-    //   - `--rule` or `-r` pointing to the rules folder
-    //   - the user selected file paths
-    //
-    // For large file sets, consider chunking or streaming. For brevity, we do a direct pass.
-
-    const astGrepCmd = "ast-grep"; // or "sg" if installed that way
+    // Build rule arguments by passing each .yml file with '-r'
+    const ruleArgs = ruleFiles.flatMap(rule => ["-r", rule]);
     const args = [
       "scan",
       "--json",
-      "-r",
-      AST_GREP_RULES_DIR,
+      ...ruleArgs,
       ...files,
     ];
 
     // If you need to skip or ignore node_modules, add: "--ignore", "node_modules"
     // or specify further in your sgconfig.yml
 
+    const astGrepCmd = "ast-grep"; // or "sg" if installed that way
     const issues: any[] = await new Promise((resolve, reject) => {
       const child = spawn(astGrepCmd, args, { shell: true });
       let stdoutData = "";
