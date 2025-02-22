@@ -16,6 +16,16 @@ export interface LintResult {
   messages: LintMessage[];
 }
 
+interface AstGrepIssue {
+  file: string;
+  ruleId: string;
+  message: string;
+  severity: string;
+  line: number;
+  column: number;
+}
+
+/** Minimal FS structure */
 interface FsEntry {
   path: string;
   name: string;
@@ -31,7 +41,9 @@ interface AnalysisLoadingViewProps {
   fsTree: FsEntry[];
   parserResults?: ParserResult[];
   lintResults?: LintResult[];
-  onDone?: () => void; // <-- new callback
+  /** NEW: pass in AST-Grep results if desired */
+  astGrepResults?: AstGrepIssue[];
+  onDone?: () => void;
 }
 
 /** Utility to generate a file-map preview */
@@ -55,6 +67,7 @@ export function AnalysisLoadingView({
   fsTree,
   parserResults,
   lintResults,
+  astGrepResults,
   onDone,
 }: AnalysisLoadingViewProps) {
   const [progress, setProgress] = useState(0);
@@ -141,6 +154,34 @@ export function AnalysisLoadingView({
             {lintResults.length} file(s) linted. Detailed results will appear in
             the next step.
           </p>
+        </div>
+      )}
+
+      {/* AST-Grep Security Results */}
+      {astGrepResults && astGrepResults.length > 0 && (
+        <div className="mt-4 border-t pt-4 w-full max-w-xl">
+          <h2 className="text-2xl font-semibold mb-2">AST-Grep Security Issues</h2>
+          <div className="border border-muted rounded-md bg-background w-full p-4 mt-2 overflow-y-auto h-64 text-sm">
+            {astGrepResults.map((issue, idx) => (
+              <div key={idx} className="mb-2">
+                <p>
+                  <strong>File:</strong> {issue.file}
+                </p>
+                <p>
+                  <strong>Rule:</strong> {issue.ruleId} (
+                  {issue.severity.toUpperCase()})
+                </p>
+                <p>
+                  <strong>Line:</strong> {issue.line}, <strong>Column:</strong>{" "}
+                  {issue.column}
+                </p>
+                <p>
+                  <strong>Message:</strong> {issue.message}
+                </p>
+                <hr className="my-2" />
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>

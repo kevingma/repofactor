@@ -95,6 +95,52 @@ export async function createLintIssueInNeo4j(params: {
   }
 }
 
+/**
+ * NEW FUNCTION to store AST-Grep issues
+ */
+export async function createAstGrepIssueInNeo4j(params: {
+  filePath: string;
+  ruleId: string;       // e.g. "express-jwt-hardcoded-secret-javascript"
+  message: string;      // text from the rule
+  severity: string;     // "error", "warning", "hint", ...
+  line: number;
+  column: number;
+}) {
+  const { filePath, ruleId, message, severity, line, column } = params;
+  const session = driver.session({ database: "neo4j" });
+
+  try {
+    const query = `
+      MERGE (file:AstNode { filePath: $filePath })
+      CREATE (issue:AstGrepIssue {
+        ruleId: $ruleId,
+        severity: $severity,
+        message: $message,
+        line: $lineNumber,
+        column: $columnNumber
+      })
+      CREATE (file)-[:HAS_AST_GREP_ISSUE]->(issue)
+      RETURN issue
+    `;
+
+    const result = await session.run(query, {
+      filePath,
+      ruleId,
+      severity,
+      message,
+      lineNumber: line,
+      columnNumber: column,
+    });
+
+    return result.records;
+  } catch (error) {
+    console.error("Error in createAstGrepIssueInNeo4j:", error);
+    throw error;
+  } finally {
+    await session.close();
+  }
+}
+
 export async function closeNeo4jConnection() {
   console.log("[DEBUG] Closing Neo4j connection");
   if (driver) {

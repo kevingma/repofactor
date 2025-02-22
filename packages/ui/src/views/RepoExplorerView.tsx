@@ -8,10 +8,18 @@ import { Checkbox } from "@repo/ui/components/checkbox";
 import { Folder, File, ChevronRight, ChevronDown } from "lucide-react";
 import { cn } from "@repo/ui/lib/utils";
 import { AnalysisLoadingView } from "@repo/ui/views/analysisLoadingView";
-import { LintResult } from "@repo/ui/views/analysisLoadingView"; // We'll define it there or in a separate types file
+import { LintResult } from "@repo/ui/views/analysisLoadingView";
 import { LintResultsView } from "@repo/ui/views/LintResultsView";
 
-/** Shared FS entry definition */
+interface AstGrepIssue {
+  file: string;
+  ruleId: string;
+  message: string;
+  severity: string;
+  line: number;
+  column: number;
+}
+
 interface FsEntry {
   path: string;
   name: string;
@@ -21,103 +29,6 @@ interface FsEntry {
   isExpanded: boolean;
   children: FsEntry[];
   language?: string;
-}
-
-function detectLanguage(filePath: string): string | undefined {
-  const lower = filePath.toLowerCase();
-  if (lower.endsWith(".ts") || lower.endsWith(".tsx")) return "typescript";
-  if (lower.endsWith(".js") || lower.endsWith(".jsx")) return "javascript";
-  return undefined;
-}
-
-async function readFsEntries(dirPath: string): Promise<FsEntry[]> {
-  const entries = await readDir(dirPath);
-  const result: FsEntry[] = [];
-
-  for (const entry of entries) {
-    if (entry.name.startsWith(".")) continue; // ignore hidden/dot-files
-    const fullPath = await join(dirPath, entry.name);
-
-    let children: FsEntry[] = [];
-    if (entry.isDirectory) {
-      children = await readFsEntries(fullPath);
-    }
-
-    result.push({
-      path: fullPath,
-      name: entry.name,
-      isFile: entry.isFile,
-      isDirectory: entry.isDirectory ?? false,
-      isChecked: true,
-      isExpanded: false,
-      children,
-      language: entry.isFile ? detectLanguage(fullPath) : undefined,
-    });
-  }
-  return result;
-}
-
-function toggleExpand(entries: FsEntry[], pathToToggle: string): FsEntry[] {
-  return entries.map((entry) => {
-    if (entry.path === pathToToggle && entry.isDirectory) {
-      return {
-        ...entry,
-        isExpanded: !entry.isExpanded,
-      };
-    }
-    if (entry.children.length > 0) {
-      return {
-        ...entry,
-        children: toggleExpand(entry.children, pathToToggle),
-      };
-    }
-    return entry;
-  });
-}
-
-function setCheckedForAll(entries: FsEntry[], checked: boolean): FsEntry[] {
-  return entries.map((entry) => ({
-    ...entry,
-    isChecked: checked,
-    children: entry.isDirectory
-      ? setCheckedForAll(entry.children, checked)
-      : entry.children,
-  }));
-}
-
-function toggleChecked(entries: FsEntry[], pathToToggle: string): FsEntry[] {
-  return entries.map((entry) => {
-    if (entry.path === pathToToggle) {
-      const newVal = !entry.isChecked;
-      return {
-        ...entry,
-        isChecked: newVal,
-        children: entry.isDirectory
-          ? setCheckedForAll(entry.children, newVal)
-          : entry.children,
-      };
-    }
-    if (entry.children.length > 0) {
-      return {
-        ...entry,
-        children: toggleChecked(entry.children, pathToToggle),
-      };
-    }
-    return entry;
-  });
-}
-
-function gatherSelectedFiles(entries: FsEntry[]): FsEntry[] {
-  let files: FsEntry[] = [];
-  for (const e of entries) {
-    if (e.isChecked && e.isFile) {
-      files.push(e);
-    }
-    if (e.children.length > 0) {
-      files = files.concat(gatherSelectedFiles(e.children));
-    }
-  }
-  return files;
 }
 
 export function RepoExplorerView() {
@@ -133,6 +44,8 @@ export function RepoExplorerView() {
 
   // For Lint
   const [lintResults, setLintResults] = useState<LintResult[]>([]);
+  // For AST-Grep
+  const [astGrepResults, setAstGrepResults] = useState<AstGrepIssue[]>([]);
 
   const handleSelectRepository = useCallback(async () => {
     setError("");
@@ -153,6 +66,103 @@ export function RepoExplorerView() {
     }
   }, []);
 
+  async function readFsEntries(dirPath: string): Promise<FsEntry[]> {
+    const entries = await readDir(dirPath);
+    const result: FsEntry[] = [];
+
+    for (const entry of entries) {
+      if (entry.name.startsWith(".")) continue; // ignore hidden/dot-files
+      const fullPath = await join(dirPath, entry.name);
+
+      let children: FsEntry[] = [];
+      if (entry.isDirectory) {
+        children = await readFsEntries(fullPath);
+      }
+
+      result.push({
+        path: fullPath,
+        name: entry.name,
+        isFile: entry.isFile,
+        isDirectory: entry.isDirectory ?? false,
+        isChecked: true,
+        isExpanded: false,
+        children,
+        language: entry.isFile ? detectLanguage(fullPath) : undefined,
+      });
+    }
+    return result;
+  }
+
+  function detectLanguage(filePath: string): string | undefined {
+    const lower = filePath.toLowerCase();
+    if (lower.endsWith(".ts") || lower.endsWith(".tsx")) return "typescript";
+    if (lower.endsWith(".js") || lower.endsWith(".jsx")) return "javascript";
+    return undefined;
+  }
+
+  function toggleExpand(entries: FsEntry[], pathToToggle: string): FsEntry[] {
+    return entries.map((entry) => {
+      if (entry.path === pathToToggle && entry.isDirectory) {
+        return {
+          ...entry,
+          isExpanded: !entry.isExpanded,
+        };
+      }
+      if (entry.children.length > 0) {
+        return {
+          ...entry,
+          children: toggleExpand(entry.children, pathToToggle),
+        };
+      }
+      return entry;
+    });
+  }
+
+  function setCheckedForAll(entries: FsEntry[], checked: boolean): FsEntry[] {
+    return entries.map((entry) => ({
+      ...entry,
+      isChecked: checked,
+      children: entry.isDirectory
+        ? setCheckedForAll(entry.children, checked)
+        : entry.children,
+    }));
+  }
+
+  function toggleChecked(entries: FsEntry[], pathToToggle: string): FsEntry[] {
+    return entries.map((entry) => {
+      if (entry.path === pathToToggle) {
+        const newVal = !entry.isChecked;
+        return {
+          ...entry,
+          isChecked: newVal,
+          children: entry.isDirectory
+            ? setCheckedForAll(entry.children, newVal)
+            : entry.children,
+        };
+      }
+      if (entry.children.length > 0) {
+        return {
+          ...entry,
+          children: toggleChecked(entry.children, pathToToggle),
+        };
+      }
+      return entry;
+    });
+  }
+
+  function gatherSelectedFiles(entries: FsEntry[]): FsEntry[] {
+    let files: FsEntry[] = [];
+    for (const e of entries) {
+      if (e.isChecked && e.isFile) {
+        files.push(e);
+      }
+      if (e.children.length > 0) {
+        files = files.concat(gatherSelectedFiles(e.children));
+      }
+    }
+    return files;
+  }
+
   const handleToggleExpand = (pathToToggle: string) => {
     setFsTree((prev) => toggleExpand(prev, pathToToggle));
   };
@@ -172,61 +182,6 @@ export function RepoExplorerView() {
       }
     }
   }, []);
-
-  const renderFsTree = (entries: FsEntry[], level = 0) => {
-    return entries.map((entry) => {
-      const indentClass = `pl-${level * 4}`;
-      const hasChildren = entry.children.length > 0;
-
-      return (
-        <div key={entry.path} className={cn(indentClass, "flex flex-col py-0.5 text-xs")}>
-          <div className="flex items-center space-x-1">
-            {entry.isDirectory ? (
-              <div
-                className="cursor-pointer w-4"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleToggleExpand(entry.path);
-                }}
-              >
-                {entry.isExpanded ? (
-                  <ChevronDown size={16} />
-                ) : (
-                  <ChevronRight size={16} />
-                )}
-              </div>
-            ) : (
-              <div className="w-4" />
-            )}
-            {entry.isDirectory ? (
-              <Folder className="text-muted-foreground" size={16} />
-            ) : (
-              <File className="text-muted-foreground" size={16} />
-            )}
-            <Checkbox
-              checked={entry.isChecked}
-              onCheckedChange={() => handleCheckboxChange(entry.path)}
-              id={entry.path}
-            />
-            <span
-              onClick={() => entry.isFile && handleFileClick(entry)}
-              className={cn(
-                "cursor-pointer",
-                entry.isFile ? "font-normal" : "font-semibold",
-              )}
-            >
-              {entry.name}
-            </span>
-          </div>
-          {entry.isDirectory && entry.isExpanded && hasChildren && (
-            <div className="ml-1 mt-0.5 border-l border-l-muted">
-              {renderFsTree(entry.children, level + 1)}
-            </div>
-          )}
-        </div>
-      );
-    });
-  };
 
   const handleProceedClick = async () => {
     try {
@@ -256,7 +211,25 @@ export function RepoExplorerView() {
       const lintData = await lintResponse.json();
       setLintResults(lintData.results || []);
 
-      // 3) Transition to "analysis" mode
+      // 3) AST-Grep scan for JavaScript
+      //    (We only do it for JS if you prefer, or pass all files if you want)
+      const jsFiles = selectedFiles
+        .filter((f) => f.language === "javascript")
+        .map((f) => f.path);
+      if (jsFiles.length > 0) {
+        const sgResponse = await fetch("http://localhost:3000/api/ast-grep-scan", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ files: jsFiles }),
+        });
+        if (!sgResponse.ok) {
+          throw new Error(`AST-Grep scan failed: ${sgResponse.statusText}`);
+        }
+        const sgData = await sgResponse.json();
+        setAstGrepResults(sgData.results || []);
+      }
+
+      // 4) Switch to "analysis" mode
       setAnalysisInProgress(true);
     } catch (err) {
       console.error("Error parsing/linting:", err);
@@ -264,32 +237,33 @@ export function RepoExplorerView() {
     }
   };
 
-  // Rendering logic: 3 states
-  // 1) Normal explorer
-  // 2) AnalysisLoadingView (when analysisInProgress && !analysisComplete)
-  // 3) LintResultsView (when analysisComplete)
+  // If analysis in progress and not complete, show loading
   if (analysisInProgress && !analysisComplete) {
     return (
       <AnalysisLoadingView
         fsTree={fsTree}
         parserResults={parserResults}
         lintResults={lintResults}
+        astGrepResults={astGrepResults}
         onDone={() => setAnalysisComplete(true)}
       />
     );
   }
 
+  // Once analysis is complete, we show the final LintResultsView or any other summary
   if (analysisComplete) {
-    // Show lint results in a dedicated page
     return (
       <LintResultsView
         fsTree={fsTree}
         parserResults={parserResults}
         lintResults={lintResults}
+        // No direct usage of astGrepResults here unless you unify them;
+        // else show them in a different view
       />
     );
   }
 
+  // Normal explorer view
   return (
     <div className="h-screen flex flex-row">
       {/* Sidebar */}
@@ -338,4 +312,62 @@ export function RepoExplorerView() {
       </div>
     </div>
   );
+
+  function renderFsTree(entries: FsEntry[], level = 0): React.ReactNode {
+    return entries.map((entry) => {
+      const indentClass = `pl-${level * 4}`;
+      const hasChildren = entry.children.length > 0;
+
+      return (
+        <div
+          key={entry.path}
+          className={cn(indentClass, "flex flex-col py-0.5 text-xs")}
+        >
+          <div className="flex items-center space-x-1">
+            {entry.isDirectory ? (
+              <div
+                className="cursor-pointer w-4"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleToggleExpand(entry.path);
+                }}
+              >
+                {entry.isExpanded ? (
+                  <ChevronDown size={16} />
+                ) : (
+                  <ChevronRight size={16} />
+                )}
+              </div>
+            ) : (
+              <div className="w-4" />
+            )}
+            {entry.isDirectory ? (
+              <Folder className="text-muted-foreground" size={16} />
+            ) : (
+              <File className="text-muted-foreground" size={16} />
+            )}
+            <Checkbox
+              checked={entry.isChecked}
+              onCheckedChange={() => handleCheckboxChange(entry.path)}
+              id={entry.path}
+            />
+            <span
+              onClick={() => entry.isFile && handleFileClick(entry)}
+              className={cn(
+                "cursor-pointer",
+                entry.isFile ? "font-normal" : "font-semibold",
+              )}
+            >
+              {entry.name}
+            </span>
+          </div>
+          {entry.isDirectory && entry.isExpanded && hasChildren && (
+            <div className="ml-1 mt-0.5 border-l border-l-muted">
+              {renderFsTree(entry.children, level + 1)}
+            </div>
+          )}
+        </div>
+      );
+    });
+  }
 }
