@@ -3,6 +3,7 @@ import { createAstGrepIssueInNeo4j } from "@repo/ui/lib/neo4jConnection";
 import { spawn } from "child_process";
 import path from "path";
 import fs from "fs";
+import os from "os";
 
 /**
  * This route will accept a POST body like:
@@ -14,7 +15,7 @@ import fs from "fs";
  * parse the JSON output, store each issue in Neo4j, and return the results.
  */
 
-// Define the rules directory and collect all .yml rule files
+// Define the rules directory
 const RULES_DIR = path.join(
   process.cwd(),
   "ast-grep-essentials",
@@ -22,9 +23,6 @@ const RULES_DIR = path.join(
   "javascript",
   "security"
 );
-const ruleFiles = fs.readdirSync(RULES_DIR)
-  .filter((file) => file.endsWith(".yml"))
-  .map((file) => path.join(RULES_DIR, file));
 
 export async function OPTIONS() {
   return new NextResponse(null, {
@@ -53,17 +51,26 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Build rule arguments by passing each .yml file with '-r'
-    const ruleArgs = ruleFiles.flatMap(rule => ["-r", rule]);
+    // Move merged rules file creation inside POST
+    const ruleFiles = fs.readdirSync(RULES_DIR)
+      .filter((file) => file.endsWith(".yml"))
+      .map((file) => path.join(RULES_DIR, file));
+    
+    const tmpDir = os.tmpdir();
+    const tempRulesFile = path.join(tmpDir, `ast-grep-merged-rules-${Date.now()}.yml`);
+    const mergedRules = ruleFiles.map(file => fs.readFileSync(file, "utf8")).join("\n---\n");
+    fs.writeFileSync(tempRulesFile, mergedRules);
+
+    // Use the merged temporary file as the single -r argument
+    const ruleArgs = ["-r", tempRulesFile];
+
+    // Build the args using the merged rules file
     const args = [
       "scan",
       "--json",
       ...ruleArgs,
       ...files,
     ];
-
-    // If you need to skip or ignore node_modules, add: "--ignore", "node_modules"
-    // or specify further in your sgconfig.yml
 
     const astGrepCmd = "ast-grep"; // or "sg" if installed that way
     const issues: any[] = await new Promise((resolve, reject) => {
@@ -78,6 +85,14 @@ export async function POST(request: NextRequest) {
         stderrData += chunk;
       });
       child.on("close", (code) => {
+        // Cleanup: delete the temporary merged rules file
+        try {
+          if (fs.existsSync(tempRulesFile)) {
+            fs.unlinkSync(tempRulesFile);
+          }
+        } catch (e) {
+          console.error("Error deleting temporary rules file:", e);
+        }
         if (code !== 0 && !stdoutData) {
           console.error("[AST-GREP ERROR]", stderrData);
           return reject(
